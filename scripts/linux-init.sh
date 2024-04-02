@@ -73,16 +73,13 @@ restart_ssh_service() {
 
 # 执行自动化操作
 main() {
-    update_system
+    # update_system
     install_packages
     reset_iptables
-
     modify_ssh_config
     restart_ssh_service
     change_timezone
     echo -e "${green}初始化完毕!${nc}"
 }
-
-sudo -i
 # 执行主函数
 main

@@ -1122,7 +1122,7 @@ linux_Settings() {
               send_stats "卸载脚本"
               echo "卸载脚本"
               echo "------------------------------------------------"
-              echo "将彻底卸载kejilion脚本，不影响你其他功能"
+              echo "将彻底卸载脚本吗，不影响你其他功能"
               read -p "确定继续吗？(Y/N): " choice
 
               case "$choice" in
@@ -1158,7 +1158,24 @@ linux_Settings() {
 
 }
 
+install_script() {
+    # 复制脚本到 /usr/local/bin/k
+    sudo cp "$0" /usr/local/bin/k
+    
+    # 确保脚本有执行权限
+    sudo chmod +x /usr/local/bin/k
+    
+    # 添加别名到 .bashrc 文件
+    echo "alias k='/usr/local/bin/k'" >> ~/.bashrc
+    
+    # 立即生效别名
+    source ~/.bashrc
+    
+    echo "脚本已安装，现在可以使用 'k' 命令来运行脚本。"
+}
+
 kejilion_sh() {
+install_script
 while true; do
 clear
 
@@ -1201,44 +1218,7 @@ done
 }
 
 
-k_info() {
-
-  send_stats "k命令参考用例"
-  echo "无效参数"
-  echo "-------------------"
-  echo "视频介绍: https://www.bilibili.com/video/BV1ib421E7it?t=0.1"
-  echo "以下是k命令参考用例："
-  echo "启动脚本            k"
-  echo "安装软件包          k install nano wget | k add nano wget | k 安装 nano wget"
-  echo "卸载软件包          k remove nano wget | k del nano wget | k uninstall nano wget | k 卸载 nano wget"
-  echo "软件开机启动        k enable docker | k autostart docke | k 开机启动 docker "
-}
-
-
 if [ "$#" -eq 0 ]; then
     # 如果没有参数，运行交互式逻辑
     kejilion_sh
-else
-    # 如果有参数，执行相应函数
-    case $1 in
-        install|add|安装)
-            shift
-            send_stats "安装软件"
-            install "$@"
-            ;;
-        remove|del|uninstall|卸载)
-            shift
-            send_stats "卸载软件"
-            remove "$@"
-            ;;
-        enable|autostart|开机启动)
-            shift
-            send_stats "软件开机自启"
-            enable "$@"
-            ;;
-
-        *)
-            k_info
-            ;;
-    esac
 fi

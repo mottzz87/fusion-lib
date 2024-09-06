@@ -1192,14 +1192,19 @@ read -p "请输入你的选择: " choice
 
 case $choice in
   1)
+    root_use
+    send_stats "root密码模式"
+    add_sshpasswd
+    ;;
+  2)
     linux_ps
     ;;
 
-  2)
+  3)
     linux_test
     ;;
 
-  3)
+  4)
     linux_Settings
     ;;
 

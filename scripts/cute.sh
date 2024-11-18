@@ -512,6 +512,16 @@ echo -e "${gl_lv}ROOT私钥登录已开启，已关闭ROOT密码登录，重连�
 
 }
 
+enable_bbr() {
+    if grep -q "net.ipv4.tcp_congestion_control=bbr" /etc/sysctl.conf; then
+        echo -e "${gl_lv}BBR 已经启用${gl_bai}"
+    else
+        echo -e "\nnet.core.default_qdisc=fq\nnet.ipv4.tcp_congestion_control=bbr" >> /etc/sysctl.conf
+        sysctl -p
+        echo -e "${gl_lv}BBR 已成功启用${gl_bai}"
+    fi
+}
+
 add_sshpasswd() {
 
 echo "设置你的ROOT密码"
@@ -784,7 +794,7 @@ linux_Settings() {
       echo -e "${gl_kjlan}7.   ${gl_bai}系统时区调整                       ${gl_kjlan}8.   ${gl_bai}本机host解析"
       echo -e "${gl_kjlan}------------------------"
       echo -e "${gl_kjlan}9.   ${gl_bai}限流自动关机                       ${gl_kjlan}10.  ${gl_bai}TG-bot系统监控预警"
-      echo -e "${gl_kjlan}99.  ${gl_bai}卸载脚本"
+      echo -e "${gl_kjlan}11.  ${gl_bai}开启BBR加速                        ${gl_kjlan}99.  ${gl_bai}卸载脚本"
       echo -e "${gl_kjlan}------------------------"
       echo -e "${gl_kjlan}0.   ${gl_bai}返回主菜单"
       echo -e "${gl_kjlan}------------------------${gl_bai}"
@@ -1116,6 +1126,13 @@ linux_Settings() {
               ;;
 
           
+          
+          11)
+                root_use
+                send_stats "开启BBR加速"
+                enable_bbr
+                break_end
+                ;;
           
           99)
               clear

@@ -18,7 +18,7 @@ permission_granted="true"
 
 CheckFirstRun_true() {
     if grep -q '^permission_granted="true"' /usr/local/bin/k > /dev/null 2>&1; then
-        sed -i 's/^permission_granted="false"/permission_granted="true"/' ./kejilion.sh
+        sed -i 's/^permission_granted="false"/permission_granted="true"/' ./cute.sh
         sed -i 's/^permission_granted="false"/permission_granted="true"/' /usr/local/bin/k
     fi
 }
@@ -58,7 +58,7 @@ trap cleanup SIGINT
 yinsiyuanquan2() {
 
 if grep -q '^ENABLE_STATS="false"' /usr/local/bin/k > /dev/null 2>&1; then
-    sed -i 's/^ENABLE_STATS="true"/ENABLE_STATS="false"/' ./kejilion.sh
+    sed -i 's/^ENABLE_STATS="true"/ENABLE_STATS="false"/' ./cute.sh
     sed -i 's/^ENABLE_STATS="true"/ENABLE_STATS="false"/' /usr/local/bin/k
 fi
 
@@ -66,7 +66,7 @@ fi
 
 
 yinsiyuanquan2
-cp -f ./kejilion.sh /usr/local/bin/k > /dev/null 2>&1
+cp -f ./cute.sh /usr/local/bin/k > /dev/null 2>&1
 
 
 
@@ -88,7 +88,7 @@ UserLicenseAgreement() {
 
     if [ "$user_input" = "y" ] || [ "$user_input" = "Y" ]; then
         send_stats "许可同意"
-        sed -i 's/^permission_granted="false"/permission_granted="true"/' ./kejilion.sh
+        sed -i 's/^permission_granted="false"/permission_granted="true"/' ./cute.sh
         sed -i 's/^permission_granted="false"/permission_granted="true"/' /usr/local/bin/k
     else
         send_stats "许可拒绝"
@@ -1129,7 +1129,7 @@ linux_Settings() {
                 [Yy])
                   clear
                   rm -f /usr/local/bin/k
-                  rm ./kejilion.sh
+                  rm ./cute.sh
                   echo "脚本已卸载，再见！"
                   break_end
                   clear

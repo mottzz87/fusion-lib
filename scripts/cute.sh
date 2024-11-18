@@ -1158,6 +1158,72 @@ linux_Settings() {
 
 }
 
+# 函数：设置防火墙
+setup_firewall() {
+    OS=$(awk -F= '/^ID=/ {print $2}' /etc/os-release | tr -d '"')
+    opened_ports=()
+    ports=(22 80 443 21 3306 8080 "6500-6550")
+
+    case "$OS" in
+        centos|rhel|fedora)
+            # 检查并安装 firewalld
+            if ! command -v firewall-cmd &>/dev/null; then
+                echo "正在安装 firewalld..."
+                install firewalld
+            fi
+
+            # 启动 firewalld
+            if ! systemctl is-active --quiet firewalld; then
+                systemctl start firewalld
+                systemctl enable firewalld
+            fi
+            
+            # 开放端口
+            for port in "${ports[@]}"; do
+                if ! firewall-cmd --list-ports | grep -q "${port}/tcp"; then
+                    firewall-cmd --permanent --add-port=${port}/tcp
+                    opened_ports+=("${port}")
+                fi
+            done
+            
+            [ ${#opened_ports[@]} -gt 0 ] && firewall-cmd --reload
+            ;;
+        
+        debian|ubuntu)
+            # 检查并安装 ufw
+            if ! command -v ufw &>/dev/null; then
+                echo "正在安装 UFW..."
+                install ufw
+            fi
+
+            # 启动 ufw
+            if ! ufw status | grep -q "Status: active"; then
+                echo "y" | ufw enable
+            fi
+            
+            # 开放端口
+            for port in "${ports[@]}"; do
+                if ! ufw status | grep -q "^${port}/tcp"; then
+                    ufw allow ${port}/tcp
+                    opened_ports+=("${port}")
+                fi
+            done
+            ;;
+        
+        *)
+            echo "不支持的操作系统: $OS"
+            return
+            ;;
+    esac
+
+    # 输出结果
+    if [ ${#opened_ports[@]} -gt 0 ]; then
+        echo "已开放端口: ${opened_ports[*]}/tcp"
+    else
+        echo "所有端口已经开放，无需重复操作"
+    fi
+}
+
 install_script() {
     # 复制脚本到 /usr/local/bin/k
     sudo cp "$0" /usr/local/bin/k
@@ -1175,6 +1241,7 @@ install_script() {
 }
 
 kejilion_sh() {
+setup_firewall
 install_script
 while true; do
 clear

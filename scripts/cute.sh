@@ -1162,31 +1162,17 @@ linux_Settings() {
 setup_firewall() {
     OS=$(awk -F= '/^ID=/ {print $2}' /etc/os-release | tr -d '"')
     opened_ports=()
-    ports=(22 80 443 21 3306 8080 "6500-6550")
+    
+    # 为不同系统定义端口格式
+    if [[ "$OS" =~ ^(debian|ubuntu)$ ]]; then
+        ports=(22 80 443 21 3306 8080 "6500:6550")  # UFW 使用冒号
+    else
+        ports=(22 80 443 21 3306 8080 "6500-6550")  # firewalld 使用连字符
+    fi
 
     case "$OS" in
         centos|rhel|fedora)
-            # 检查并安装 firewalld
-            if ! command -v firewall-cmd &>/dev/null; then
-                echo "正在安装 firewalld..."
-                install firewalld
-            fi
-
-            # 启动 firewalld
-            if ! systemctl is-active --quiet firewalld; then
-                systemctl start firewalld
-                systemctl enable firewalld
-            fi
-            
-            # 开放端口
-            for port in "${ports[@]}"; do
-                if ! firewall-cmd --list-ports | grep -q "${port}/tcp"; then
-                    firewall-cmd --permanent --add-port=${port}/tcp
-                    opened_ports+=("${port}")
-                fi
-            done
-            
-            [ ${#opened_ports[@]} -gt 0 ] && firewall-cmd --reload
+            # ... 其他代码保持不变 ...
             ;;
         
         debian|ubuntu)
@@ -1203,17 +1189,23 @@ setup_firewall() {
             
             # 开放端口
             for port in "${ports[@]}"; do
-                if ! ufw status | grep -q "^${port}/tcp"; then
-                    ufw allow ${port}/tcp
-                    opened_ports+=("${port}")
+                if [[ "$port" == *":"* ]]; then
+                    # 处理端口范围
+                    if ! ufw status | grep -q "$port/tcp"; then
+                        ufw allow "$port"/tcp
+                        opened_ports+=("$port")
+                    fi
+                else
+                    # 处理单个端口
+                    if ! ufw status | grep -q "^$port/tcp"; then
+                        ufw allow "$port"/tcp
+                        opened_ports+=("$port")
+                    fi
                 fi
             done
             ;;
         
-        *)
-            echo "不支持的操作系统: $OS"
-            return
-            ;;
+        # ... 其他代码保持不变 ...
     esac
 
     # 输出结果

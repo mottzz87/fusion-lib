@@ -524,20 +524,290 @@ enable_bbr() {
 
 add_sshpasswd() {
 
-echo "设置你的ROOT密码"
-passwd
-sed -i 's/^\s*#\?\s*PermitRootLogin.*/PermitRootLogin yes/g' /etc/ssh/sshd_config;
-sed -i 's/^\s*#\?\s*PasswordAuthentication.*/PasswordAuthentication yes/g' /etc/ssh/sshd_config;
-rm -rf /etc/ssh/sshd_config.d/* /etc/ssh/ssh_config.d/*
-restart_ssh
-echo -e "${gl_lv}ROOT登录设置完毕！${gl_bai}"
+  echo "设置你的ROOT密码"
+  passwd
+  sed -i 's/^\s*#\?\s*PermitRootLogin.*/PermitRootLogin yes/g' /etc/ssh/sshd_config;
+  sed -i 's/^\s*#\?\s*PasswordAuthentication.*/PasswordAuthentication yes/g' /etc/ssh/sshd_config;
+  rm -rf /etc/ssh/sshd_config.d/* /etc/ssh/ssh_config.d/*
+  restart_ssh
+  echo -e "${gl_lv}ROOT登录设置完毕！${gl_bai}"
 
 }
 
 
 root_use() {
-clear
-[ "$EUID" -ne 0 ] && echo -e "${gl_huang}提示: ${gl_bai}该功能需要root用户才能运行！" && break_end && kejilion
+  clear
+  [ "$EUID" -ne 0 ] && echo -e "${gl_huang}提示: ${gl_bai}该功能需要root用户才能运行！" && break_end && kejilion
+}
+
+# Fail2Ban管理主函数
+fail2ban_management() {
+    while true; do
+        clear
+        echo -e "▶ Fail2Ban 管理"
+        echo -e "${gl_kjlan}------------------------"
+        echo -e "${gl_kjlan}1.   ${gl_bai}安装配置Fail2Ban"
+        echo -e "${gl_kjlan}2.   ${gl_bai}查看封禁状态"
+        echo -e "${gl_kjlan}3.   ${gl_bai}解封指定IP"
+        echo -e "${gl_kjlan}------------------------"
+        echo -e "${gl_kjlan}0.   ${gl_bai}返回上级菜单"
+        echo -e "${gl_kjlan}------------------------${gl_bai}"
+        read -p "请输入你的选择: " f2b_choice
+
+        case $f2b_choice in
+            1)
+                root_use
+                send_stats "安装配置Fail2Ban"
+                setup_fail2ban
+                ;;
+            2)
+                root_use
+                send_stats "查看Fail2Ban封禁状态"
+                check_fail2ban_status
+                ;;
+            3)
+                root_use
+                send_stats "解封Fail2Ban IP"
+                unban_ip
+                ;;
+            0)
+                break
+                ;;
+            *)
+                echo "无效的选择！"
+                break_end
+                ;;
+        esac
+    done
+}
+
+# 安装配置Fail2Ban
+setup_fail2ban() {
+    clear
+    echo "正在安装配置Fail2Ban..."
+    
+    # 检查并安装nginx
+    check_nginx
+    
+    # 创建配置目录
+    FAIL2BAN_PATH="/etc/fail2ban"
+    FILTER_PATH="$FAIL2BAN_PATH/filter.d"
+    
+    # 备份当前的封禁IP列表（如果存在）
+    if [ -f "$FAIL2BAN_PATH/jail.local" ]; then
+        echo "备份现有的封禁IP列表..."
+        mkdir -p /root/fail2ban_backup
+        # 获取当前被封禁的IP列表
+        current_banned_ips=$(fail2ban-client status nginx-custom 2>/dev/null | grep "Banned IP list:" | sed 's/.*Banned IP list:\t//')
+        
+        # 如果获取到了IP列表
+        if [ ! -z "$current_banned_ips" ]; then
+            # 对于每个IP，检查是否已经存在于文件中，如果不存在则追加
+            for ip in $current_banned_ips; do
+                if [ ! -f "/root/fail2ban_backup/banned_ips.txt" ] || ! grep -q "^$ip$" "/root/fail2ban_backup/banned_ips.txt"; then
+                    echo "$ip" >> /root/fail2ban_backup/banned_ips.txt
+                fi
+            done
+        fi
+    fi
+
+    # 备份原有配置
+    echo "备份原有配置..."
+    timestamp=$(date +%Y%m%d_%H%M%S)
+    if [ -f "$FAIL2BAN_PATH/jail.local" ]; then
+        cp "$FAIL2BAN_PATH/jail.local" "$FAIL2BAN_PATH/jail.local.backup_$timestamp"
+    fi
+
+    # 创建jail.local
+    echo "创建jail.local..."
+    cat > "$FAIL2BAN_PATH/jail.local" << 'EOL'
+[DEFAULT]
+# 封禁时间为1小时
+bantime = 1h
+# 查找时间为10分钟
+findtime = 10m
+# 在findtime期间允许最多3次失败
+maxretry = 3
+
+# 自定义过滤规则
+[nginx-custom]
+enabled  = true
+port     = http,https
+filter   = nginx-custom
+action   = iptables-multiport[name=CriticalAttacks, port="http,https"]
+logpath  = /var/log/nginx/access.log
+maxretry = 1
+bantime  = -1  # 永久封禁
+findtime = 86400
+
+EOL
+
+    # 创建过滤规则文件
+    echo "创建过滤规则文件..."
+    
+    # nginx-custom.conf
+    cat > "$FILTER_PATH/nginx-custom.conf" << 'EOL'
+[Definition]
+failregex = ^<HOST> \- \S+ \[\] \"(GET|POST|HEAD) .+XDEBUG.+$
+            ^<HOST> \- \S+ \[\] \"(GET|POST|HEAD) .+GponForm.+$
+            ^<HOST> \- \S+ \[\] \"(GET|POST|HEAD) .+phpunit.+$
+            ^<HOST> \- \S+ \[\] \"(GET|POST|HEAD) .+ajax-index\.php .+$
+            ^<HOST> \- \S+ \[\] \"(GET|POST|HEAD) .+sellers\.json .+$
+            ^<HOST> \- \S+ \[\] \"(GET|POST|HEAD) .+adminer\.php .+$
+            ^<HOST> \- \S+ \[\] \"(GET|POST|HEAD) .+wp-configuration\.php.+$
+            ^<HOST> \- \S+ \[\] \"(GET|POST|HEAD) .+ThinkPHP.+$
+            ^<HOST> \- \S+ \[\] \"(GET|POST|HEAD) .+wp-config.+$
+            ^<HOST> \- \S+ \[\] \"(GET|POST|HEAD) .+dede\/login\.php .+$
+            ^<HOST> \- \S+ \[\] \"(GET|POST|HEAD) .+plus\/recommend\.php .+$
+            ^<HOST> \- \S+ \[\] \"(GET|POST|HEAD) .+e\/install\/index.php .+$
+            ^<HOST> \- \S+ \[\] \"(GET|POST|HEAD) .+m\/e\/install\/index\.php .+$
+            ^<HOST> \- \S+ \[\] \"(GET|POST|HEAD) .+e_bak\/install\/index.php .+$
+            ^<HOST> \- \S+ \[\] \"(GET|POST|HEAD) .+\.aspx .+$
+            ^<HOST> \- \S+ \[\] \"(GET|POST|HEAD) .+\.act .+$
+            ^<HOST>.*] "(GET|POST|HEAD) .*xmlrpc\.php.*
+            ^<HOST> -.*"(GET|POST|HEAD).*HTTP\/1\.1.*"*.Mozilla/5\.0 \(Windows NT 6\.1\; rv\:60\.0\) Gecko\/20100101 Firefox\/60\.0.*"$
+            ^<HOST> -.*"(GET|POST|HEAD).*HTTP\/1\.1.*"*.Photon.*"$
+            ^<HOST> -.*"(GET|POST|HEAD).*HTTP\/1\.1.*"*.Mozilla\/5\.0 zgrab\/0\.x.*"$
+            ^<HOST> -.*"(GET|POST|HEAD).*HTTP\/1\.1.*"*.XTC.*"$
+            ^<HOST> -.*"(GET|POST|HEAD).*HTTP\/1\.1.*"*.python-requests.*"$
+            ^<HOST> -.*"(GET|POST|HEAD).*HTTP\/1\.1.*"*.bidswitchbot.*"$
+            ^<HOST> -.*"(GET|POST|HEAD).*HTTP\/1\.1.*"*.Google-adstxt.*"$
+            ^<HOST> -.*"(GET|POST|HEAD).*HTTP\/1\.1.*"*.Apache-HttpClient.*"$
+            ^<HOST>.*] "POST .*HTTP\/1\.1.*
+            ^<HOST> -.*"(GET|POST|HEAD).*HTTP\/1\.1.*"*.Go-http-client\/1\.1.*"$
+            ^<HOST> .* ".*\\x.*" .*$
+            ^<HOST> -.*"(GET|POST|HEAD) .+wp-login\.php .*HTTP\/1\.1.*
+            ^<HOST> -.*"(GET|POST|HEAD) .*wp-includes/wlwmanifest.xml .*HTTP\/1\.1.*
+ignoreregex = ^<HOST>.*] "POST /xmlrpc\.php\?for=wpandroid*
+              ^<HOST>.*] "POST /wp-cron\.php\?doing_wp_cron=.*
+datepattern = {^LN-BEG}%%ExY(?P<_sep>[-/.])%%m(?P=_sep)%%d[T ]%%H:%%M:%%S(?:[.,]%%f)?(?:\s*%%z)?
+              ^[^\[]*\[({DATE})
+              {^LN-BEG}
+EOL
+
+    # 设置正确的权限
+    chmod 644 "$FAIL2BAN_PATH/jail.local"
+    chmod 644 "$FILTER_PATH/nginx-custom.conf"
+
+    # 测试配置
+    echo "测试fail2ban配置..."
+    fail2ban-client -t
+
+    if [ $? -eq 0 ]; then
+        echo "配置测试通过，重启fail2ban服务..."
+        systemctl restart fail2ban
+        
+        # 等待fail2ban服务完全启动
+        echo "等待fail2ban服务启动..."
+        max_attempts=30
+        attempt=1
+        while [ $attempt -le $max_attempts ]; do
+            if fail2ban-client ping &>/dev/null; then
+                echo "fail2ban服务已经成功启动"
+                break
+            fi
+            echo "等待fail2ban服务启动中... ($attempt/$max_attempts)"
+            sleep 1
+            attempt=$((attempt + 1))
+        done
+
+        if [ $attempt -gt $max_attempts ]; then
+            echo "fail2ban服务启动超时，请检查服务状态"
+            exit 1
+        fi
+        
+        # 恢复之前的封禁IP列表
+        if [ -f "/root/fail2ban_backup/banned_ips.txt" ]; then
+            echo "正在恢复之前的封禁IP列表..."
+            echo "备份文件中的IP列表："
+            cat /root/fail2ban_backup/banned_ips.txt
+            echo "------------------------"
+            while IFS= read -r ip; do
+                # 检查是否是有效的IP地址（简单验证）
+                if [[ $ip =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+                    # 检查IP是否已经被封禁
+                    if ! fail2ban-client status nginx-custom | grep -q "$ip"; then
+                        if fail2ban-client set nginx-custom banip "$ip" &>/dev/null; then
+                            echo "成功封禁IP: $ip"
+                        fi
+                    fi
+                fi
+            done < /root/fail2ban_backup/banned_ips.txt
+        fi
+        
+        echo "检查fail2ban状态..."
+        systemctl status fail2ban
+        echo "安装完成！"
+    else
+        echo "配置测试失败，请检查配置文件。"
+        exit 1
+    fi
+}
+
+# 查看封禁状态
+check_fail2ban_status() {
+    clear
+    echo "=== Fail2Ban 封禁状态查看 ==="
+    echo
+
+    # 从jail.local文件中读取所有jail名称
+    JAILS=()
+    while read -r line; do
+        if [[ $line =~ ^\[(.*)\]$ && $line != "[DEFAULT]" ]]; then
+            jail_name="${line:1:-1}"
+            JAILS+=("$jail_name")
+        fi
+    done < /etc/fail2ban/jail.local
+
+    if [ ${#JAILS[@]} -eq 0 ]; then
+        echo "错误：未在jail.local中找到任何jail配置"
+        break_end
+        return
+    fi
+
+    # 显示fail2ban状态
+    echo "=== 总体状态 ==="
+    fail2ban-client status
+    echo
+
+    # 遍历每个jail并显示详细信息
+    for jail in "${JAILS[@]}"; do
+        echo "=== $jail 详细信息 ==="
+        fail2ban-client status "$jail"
+        echo
+    done
+
+    # 显示当前iptables中的所有封禁记录
+    echo "=== IPTables 封禁记录 ==="
+    iptables -L -n | grep -i 'reject'
+    echo
+
+    break_end
+}
+
+# 解封指定IP
+unban_ip() {
+    clear
+    echo "=== 解封指定IP ==="
+    echo
+    read -p "请输入要解封的IP地址: " ip_address
+
+    # 从jail.local文件中读取所有jail名称
+    JAILS=()
+    while read -r line; do
+        if [[ $line =~ ^\[(.*)\]$ && $line != "[DEFAULT]" ]]; then
+            jail_name="${line:1:-1}"
+            JAILS+=("$jail_name")
+        fi
+    done < /etc/fail2ban/jail.local
+
+    # 遍历每个jail并尝试解封IP
+    for jail in "${JAILS[@]}"; do
+        fail2ban-client set "$jail" unbanip "$ip_address"
+    done
+
+    echo "IP $ip_address 已在所有规则中解封"
+    break_end
 }
 
 linux_ps() {
@@ -794,7 +1064,8 @@ linux_Settings() {
       echo -e "${gl_kjlan}7.   ${gl_bai}系统时区调整                       ${gl_kjlan}8.   ${gl_bai}本机host解析"
       echo -e "${gl_kjlan}------------------------"
       echo -e "${gl_kjlan}9.   ${gl_bai}限流自动关机                       ${gl_kjlan}10.  ${gl_bai}TG-bot系统监控预警"
-      echo -e "${gl_kjlan}11.  ${gl_bai}开启BBR加速                        ${gl_kjlan}99.  ${gl_bai}卸载脚本"
+      echo -e "${gl_kjlan}11.  ${gl_bai}开启BBR加速                        ${gl_kjlan}12.  ${gl_bai}Fail2Ban管理 ▶"
+      echo -e "${gl_kjlan}99.  ${gl_bai}卸载脚本"
       echo -e "${gl_kjlan}------------------------"
       echo -e "${gl_kjlan}0.   ${gl_bai}返回主菜单"
       echo -e "${gl_kjlan}------------------------${gl_bai}"
@@ -1128,12 +1399,15 @@ linux_Settings() {
           
           
           11)
-                root_use
-                send_stats "开启BBR加速"
-                enable_bbr
-                break_end
-                ;;
-          
+            root_use
+            send_stats "开启BBR加速"
+            enable_bbr
+            break_end
+            ;;
+          12)
+            fail2ban_management
+            break_end
+            ;;
           99)
               clear
               send_stats "卸载脚本"
@@ -1250,52 +1524,52 @@ install_script() {
 }
 
 kejilion_sh() {
-setup_firewall
-install_script
-while true; do
-clear
+  setup_firewall
+  install_script
+  while true; do
+  clear
 
-echo -e "适配Ubuntu/Debian/CentOS/Alpine/Kali/Arch/RedHat/Fedora/Alma/Rocky系统"
-echo -e "-输入${gl_huang}k${gl_kjlan}可快速启动此脚本-${gl_bai}"
-echo -e "${gl_kjlan}------------------------${gl_bai}"
-echo -e "${gl_kjlan}1. ${gl_bai}ROOT密码登录"
-echo -e "${gl_kjlan}2. ${gl_bai}系统信息查询"
-echo -e "${gl_kjlan}3. ${gl_bai}测试脚本合集 ▶ "
-echo -e "${gl_kjlan}4. ${gl_bai}系统工具 ▶ "
-echo -e "${gl_kjlan}------------------------${gl_bai}"
-echo -e "${gl_kjlan}0.   ${gl_bai}退出脚本"
-echo -e "${gl_kjlan}------------------------${gl_bai}"
-read -p "请输入你的选择: " choice
+  echo -e "适配Ubuntu/Debian/CentOS/Alpine/Kali/Arch/RedHat/Fedora/Alma/Rocky系统"
+  echo -e "-输入${gl_huang}k${gl_kjlan}可快速启动此脚本-${gl_bai}"
+  echo -e "${gl_kjlan}------------------------${gl_bai}"
+  echo -e "${gl_kjlan}1. ${gl_bai}ROOT密码登录"
+  echo -e "${gl_kjlan}2. ${gl_bai}系统信息查询"
+  echo -e "${gl_kjlan}3. ${gl_bai}测试脚本合集 ▶ "
+  echo -e "${gl_kjlan}4. ${gl_bai}系统工具 ▶ "
+  echo -e "${gl_kjlan}------------------------${gl_bai}"
+  echo -e "${gl_kjlan}0.   ${gl_bai}退出脚本"
+  echo -e "${gl_kjlan}------------------------${gl_bai}"
+  read -p "请输入你的选择: " choice
 
-case $choice in
-  1)
-    root_use
-    send_stats "root密码模式"
-    add_sshpasswd
-    ;;
-  2)
-    linux_ps
-    ;;
+  case $choice in
+    1)
+      root_use
+      send_stats "root密码模式"
+      add_sshpasswd
+      ;;
+    2)
+      linux_ps
+      ;;
 
-  3)
-    linux_test
-    ;;
+    3)
+      linux_test
+      ;;
 
-  4)
-    linux_Settings
-    ;;
+    4)
+      linux_Settings
+      ;;
 
-  0)
-    clear
-    exit
-    ;;
+    0)
+      clear
+      exit
+      ;;
 
-  *)
-    echo "无效的输入!"
-    ;;
-esac
-    break_end
-done
+    *)
+      echo "无效的输入!"
+      ;;
+  esac
+      break_end
+  done
 
 }
 

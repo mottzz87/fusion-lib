@@ -679,7 +679,7 @@ failregex = ^<HOST> \- \S+ \[\] \"(GET|POST|HEAD) .+XDEBUG.+$
             ^<HOST> -.*"(GET|POST|HEAD) /(.*[/.](env|aws|git)(\?.*)?) HTTP.*"$
             ^<HOST> -.*"(GET|POST|HEAD) .+wp-login\.php .*HTTP\/1\.1.*
             ^<HOST> -.*"(GET|POST|HEAD) .*wp-includes/wlwmanifest.xml .*HTTP\/1\.1.*
-            ^<HOST> - - "GET /" HTTP/1\.[01] .*"$
+            ^<HOST> - - \[.*\] "(GET|POST|HEAD) /.* HTTP/1\.[01]" [0-9]+ [0-9]+ "-" "-"
 ignoreregex = ^<HOST>.*] "POST /xmlrpc\.php\?for=wpandroid*
               ^<HOST>.*] "POST /wp-cron\.php\?doing_wp_cron=.*
               ^<HOST> - - \[.*\] "(GET|POST|HEAD) /api/polly HTTP.*"

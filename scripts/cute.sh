@@ -683,6 +683,7 @@ failregex = ^<HOST> \- \S+ \[\] \"(GET|POST|HEAD) .+XDEBUG.+$
 ignoreregex = ^<HOST>.*] "POST /xmlrpc\.php\?for=wpandroid*
               ^<HOST>.*] "POST /wp-cron\.php\?doing_wp_cron=.*
               ^<HOST> - - \[.*\] "(GET|POST|HEAD) /api/polly HTTP.*"
+              ^<HOST>.*] "POST /api/auth/register.*"
 datepattern = {^LN-BEG}%%ExY(?P<_sep>[-/.])%%m(?P=_sep)%%d[T ]%%H:%%M:%%S(?:[.,]%%f)?(?:\s*%%z)?
               ^[^\[]*\[({DATE})
               {^LN-BEG}
